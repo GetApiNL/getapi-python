@@ -1,0 +1,40 @@
+name: Publiceren op PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]" build twine
+      - run: pytest
+      - name: Controleer dat de tag bij de versie past
+        if: github.event_name == 'release'
+        run: |
+          version=$(python -c "import getapi; print(getapi.__version__)")
+          test "v$version" = "${{ github.event.release.tag_name }}" || { echo "Tag ${{ github.event.release.tag_name }} past niet bij versie $version"; exit 1; }
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
